@@ -1,0 +1,50 @@
+# Predicción de Datos con GBT.
+# !pip install -q pyspark
+
+from pyspark.sql import SparkSession
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.regression import GBTRegressor
+from pyspark.ml import Pipeline
+from pyspark.sql.functions import col
+from pyspark.sql.types import DateType
+from pyspark.sql.functions import unix_timestamp, from_unixtime
+
+# Inicia la sesión de Spark
+spark = SparkSession.builder.appName("Prediccion_Helados").getOrCreate()
+
+# Carga los datos desde el archivo CSV
+archivo = './sample_data/datos_ventas_helados.csv'
+df_spark = spark.read.csv(archivo, inferSchema=True, header=True)
+
+# Renombra la columna 'ventas' si es necesario
+df_spark = df_spark.withColumnRenamed('ventas', 'Ventas')
+
+# Selecciona las columnas de características
+feature_columns = ['temperatura']
+
+# Crea un ensamblador de vectores
+vector_assembler = VectorAssembler(inputCols=feature_columns, outputCol='features')
+
+# Crea un modelo de Gradient Boosting Regressor
+gbt = GBTRegressor(featuresCol='features', labelCol='Ventas', maxDepth=5, maxIter=50)
+
+# Crea un pipeline
+pipeline = Pipeline(stages=[vector_assembler, gbt])
+
+# Divide el conjunto de datos en conjunto de entrenamiento y conjunto de prueba
+(training_data, testing_data) = df_spark.randomSplit([0.8, 0.2], seed=1234)
+
+# Entrena el modelo
+model = pipeline.fit(training_data)
+
+# Ingrese la fecha para la cual quieres hacer la predicción
+fecha_ingresada = '2021-12-31'
+
+# Filtrar el conjunto de datos para la fecha ingresada
+data_for_prediction = df_spark.filter(col('fecha') == fecha_ingresada)
+
+# Realiza predicciones en el conjunto de datos de predicción
+predictions = model.transform(data_for_prediction)
+
+# Muestra las predicciones
+predictions.select('fecha', 'temperatura', 'ventas','prediction').show(truncate=False)

@@ -1,0 +1,56 @@
+#!pip install -q pyspark # Solo la primera vez que se ejecuta.
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.regression import LinearRegression
+from pyspark.ml import Pipeline
+from pyspark.sql.functions import col
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.appName("Test_spark").master("local[*]").getOrCreate()
+
+archivo = './sample_data/datos_ventas_helados.csv'
+df_spark = spark.read.csv(archivo, inferSchema=True, header=True)
+
+# Cantidad de Registros.
+#print(df_spark.count(), "Registros") 
+# Nombre de las Columnas.
+#print(df_spark.columns)
+# Ver solo los 20 Registros por Defecto.
+#df_spark.show()
+
+### Predicciones... 
+
+# Renombrar la columna 'ventas' si es necesario
+df_spark = df_spark.withColumnRenamed('ventas', 'Ventas')
+
+# Seleccionar las columnas de características
+feature_columns = ['temperatura']
+
+# Crear un ensamblador de vectores
+vector_assembler = VectorAssembler(inputCols=feature_columns, outputCol='features')
+
+# Crear un modelo de regresión lineal
+lr = LinearRegression(featuresCol='features', labelCol='Ventas')
+
+# Crear un pipeline
+pipeline = Pipeline(stages=[vector_assembler, lr])
+
+# Dividir el conjunto de datos en conjunto de entrenamiento y conjunto de prueba
+(training_data, testing_data) = df_spark.randomSplit([0.8, 0.2], seed=1234)
+
+# Entrenar el modelo
+model = pipeline.fit(training_data)
+
+# Ingresar la fecha para la cual quieres hacer la predicción
+fecha_ingresada = '2021-11-13'  # Debes ajustar esto a la fecha que deseas
+
+# Filtrar el conjunto de datos para la fecha ingresada
+data_for_prediction = df_spark.filter(col('fecha') == fecha_ingresada)
+
+# Hacer predicciones en el conjunto de prueba
+predictions = model.transform(data_for_prediction)
+
+# Redondeo
+#predictions = predictions.withColumn('prediction', round('prediction', 2))
+
+# Mostrar las predicciones
+predictions.select('fecha', 'temperatura', 'Ventas', 'prediction').show()
